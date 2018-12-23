@@ -5,7 +5,7 @@ var cheerio = require("cheerio");
 var axios = require("axios");
 var logger = require("morgan");
 
-var PORT = 8000;
+var PORT = process.env.PORT || 8000;
 
 //require all models
 var db = require("./models");
@@ -22,30 +22,33 @@ app.use(express.json());
 app.use(express.static("public"));
 
 //connect to Mongo DB
-mongoose.connect("mongodb://localhost/webScraper", { useNewUrlParser: true });
+var MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost/mwebScraper";
+mongoose.connect(MONGODB_URI, { useNewUrlParser: true });
+
+//handlebars
+app.engine("handlebars", exphbs({
+    defaultLayout: "main"
+}));
+app.set("view engine", "handlebars");
 
 //routes
 //GET route for scraping the stack overflow website
 app.get("/scrape", function(req, res) {
     //grab body of the html with axios
-    axios.get("https://stackoverflow.com/").then(function(response) {
+    axios.get("https://www.geekwire.com/").then(function(response) {
         //load body into cheerio and to $ for a shorthand selector
         var $ = cheerio.load(response.data);    
         // An empty array to save the data that we'll scrape
         var results = [];
 
-            $(".summary").each(function(i, element) {
-            var title = $(element).text().trim().split("\r");
-            var link = $(element).children().children().attr("href");
-
-            $(".mini-counts").each(function(i, element) {
-            var views = $(element).text();
+        $(".entry-title").each(function(i, element) {
+            var title = $(element).text();
+            var link = $(element).children().attr("href");
   
             // Save these results in an object that we'll push into the results array we defined earlier
             results.push({
-            title: title[0],
+            title: title,
             link: link,
-            views: views
             });
             // Create new Post using the result object
             db.Questions.create(results)
@@ -58,9 +61,8 @@ app.get("/scrape", function(req, res) {
             });
         });
         res.send("Scrape Complete");
-       
+        console.log(results);
     }); 
-});
 
 // Route for getting all Questions from the db
 app.get("/questions", function(req, res) {
@@ -98,7 +100,6 @@ app.post("/questions/:id", function(req, res) {
             res.json(err);
     });
 });
-
 
 // Start the server
 app.listen(PORT, function() {
