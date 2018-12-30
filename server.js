@@ -1,108 +1,180 @@
+// require dependencies
 var express = require("express");
-var exphbs  = require('express-handlebars');
 var mongoose = require("mongoose");
+var request = require("request");
 var cheerio = require("cheerio");
-var axios = require("axios");
-var logger = require("morgan");
+var bodyParser = require("body-parser");
+var exphbs = require("express-handlebars");
 
-var PORT = process.env.PORT || 8000;
+var PORT = process.env.PORT || 3000;
 
-//require all models
-var db = require("./models");
-
-//initialize Express
+// initialize Express
 var app = express();
 
-//configure middleware
-app.use(logger("dev"));
-//parse request body as JSON
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
-// Make public a static folder
+// use body-parser for handling form submissions
+app.use(bodyParser.urlencoded({
+  extended: false
+}));
+app.use(bodyParser.json({
+  type: "application/json"
+}));
+
+// serve the public directory
 app.use(express.static("public"));
 
-//connect to Mongo DB
-var MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost/mwebScraper";
-mongoose.connect(MONGODB_URI, { useNewUrlParser: true });
+// use promises with Mongo and connect to the database
+var databaseUrl = "news";
+mongoose.Promise = Promise; 
+var MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost/news";
+mongoose.connect(MONGODB_URI);
 
-//handlebars
+// use handlebars
 app.engine("handlebars", exphbs({
-    defaultLayout: "main"
+  defaultLayout: "main"
 }));
 app.set("view engine", "handlebars");
 
-//routes
-//GET route for scraping the stack overflow website
-app.get("/scrape", function(req, res) {
-    //grab body of the html with axios
-    axios.get("https://www.geekwire.com/").then(function(response) {
-        //load body into cheerio and to $ for a shorthand selector
-        var $ = cheerio.load(response.data);    
-        // An empty array to save the data that we'll scrape
-        var results = [];
+// Hook mongojs configuration to the db variable
+var db = require("./models");
 
-        $(".entry-title").each(function(i, element) {
-            var title = $(element).text();
-            var link = $(element).children().attr("href");
-  
-            // Save these results in an object that we'll push into the results array we defined earlier
-            results.push({
+// get all articles from the database that are not saved
+app.get("/", function(req, res) {
+
+  db.Article.find({
+      saved: false
+    },
+
+    function(error, dbArticle) {
+      if (error) {
+        console.log(error);
+      } else {
+        res.render("index", {
+          articles: dbArticle
+        });
+      }
+    })
+})
+
+// use cheerio to scrape stories from TechCrunch and store them
+app.get("/scrape", function(req, res) {
+  request("https://techcrunch.com/", function(error, response, html) {
+    // Load the html body from request into cheerio
+    var $ = cheerio.load(html);
+    $("div.post-block").each(function(i, element) {
+
+      // trim() removes whitespace because the items return \n and \t before and after the text
+      var title = $(element).find("a.post-block__title__link").text().trim();
+      var link = $(element).find("a.post-block__title__link").attr("href");
+      var intro = $(element).children(".post-block__content").text().trim();
+
+      // if these are present in the scraped data, create an article in the database collection
+      if (title && link && intro) {
+        db.Article.create({
             title: title,
             link: link,
-            });
-            // Create new Post using the result object
-            db.Questions.create(results)
-                .then(function(dbQuestions) {
-                    console.log(dbQuestions);
-                })
-                .catch(function(err) {
-                    console.log(err);
-                })
-            });
-        });
-        res.send("Scrape Complete");
-        console.log(results);
-    }); 
-
-// Route for getting all Questions from the db
-app.get("/questions", function(req, res) {
-    db.Questions.find({})
-        .then(function(dbQuestions) {
-            res.json(dbQuestions);
-        })
-        .catch(function(err) {
-            res.json(err);
-        });
-});
-
-//  Route for grabbing a specific Question by ID, populate with note
-app.get("/questions/:id", function(req, res) {
-    db.Questions.findOne({_id: req.params.id})
-        .populate("note")
-        .then(function(dbQuestions) {
-        res.json(dbQuestions);
-        })
-        .catch(function(err) {
-        res.json(err);
+            intro: intro
+          },
+          function(err, inserted) {
+            if (err) {
+              // log the error if one is encountered during the query
+              console.log(err);
+            } else {
+              // otherwise, log the inserted data
+              console.log(inserted);
+            }
+          });
+        // if there are 10 articles, then return the callback to the frontend
+        console.log(i);
+        if (i === 10) {
+          return res.sendStatus(200);
+        }
+      }
     });
-});
-
-// Route for saving/updating an Article's associated Note
-app.post("/questions/:id", function(req, res) {
-    db.Note.create(req.body)
-        .then(function(dbNote) {
-            return db.Questions.findOneAndUpdate({ _id: req.params.id}, { note: dbNote._id }, { new: true});
-        })
-        .then(function(dbQuestions) {
-            res.json(dbQuestions);
-        })
-        .catch(function(err) {
-            res.json(err);
-    });
-});
-
-// Start the server
-app.listen(PORT, function() {
-    console.log("App running on port " + PORT + "!");
   });
-  
+});
+
+// route for retrieving all the saved articles
+app.get("/saved", function(req, res) {
+  db.Article.find({
+      saved: true
+    })
+    .then(function(dbArticle) {
+      // if successful, then render with the handlebars saved page
+      res.render("saved", {
+        articles: dbArticle
+      })
+    })
+    .catch(function(err) {
+      // If an error occurs, send the error back to the client
+      res.json(err);
+    })
+
+});
+
+// route for setting an article to saved
+app.put("/saved/:id", function(req, res) {
+  db.Article.findByIdAndUpdate(
+      req.params.id, {
+        $set: req.body
+      }, {
+        new: true
+      })
+    .then(function(dbArticle) {
+      res.render("saved", {
+        articles: dbArticle
+      })
+    })
+    .catch(function(err) {
+      res.json(err);
+    });
+});
+
+// route for saving a new note to the db and associating it with an article
+app.post("/submit/:id", function(req, res) {
+  db.Note.create(req.body)
+    .then(function(dbNote) {
+      var articleIdFromString = mongoose.Types.ObjectId(req.params.id)
+      return db.Article.findByIdAndUpdate(articleIdFromString, {
+        $push: {
+          notes: dbNote._id
+        }
+      })
+    })
+    .then(function(dbArticle) {
+      res.json(dbNote);
+    })
+    .catch(function(err) {
+      // If an error occurs, send it back to the client
+      res.json(err);
+    });
+});
+
+// route to find a note by ID
+app.get("/notes/article/:id", function(req, res) {
+  db.Article.findOne({"_id":req.params.id})
+    .populate("notes")
+    .exec (function (error, data) {
+        if (error) {
+            console.log(error);
+        } else {
+          res.json(data);
+        }
+    });        
+});
+
+
+app.get("/notes/:id", function(req, res) {
+
+  db.Note.findOneAndRemove({_id:req.params.id}, function (error, data) {
+      if (error) {
+          console.log(error);
+      } else {
+      }
+      res.json(data);
+  });
+});
+
+// listen for the routes
+app.listen(PORT, function() {
+  console.log("App is running");
+});

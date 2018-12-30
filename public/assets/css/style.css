@@ -1,0 +1,32 @@
+body {
+  background: url("/assets/img/whiteBrickWall.jpg");
+}
+
+.jumbotron {
+  background: url("/assets/img/laptopBg.jpg") no-repeat center center;
+  color: white;
+  border-radius: 10px;
+}
+
+.display-4 {
+  font-size: 60px;
+  font-weight: bolder;
+}
+
+.lead {
+  font-size: 40px;
+  font-weight: bolder;
+}
+
+.btn-primary {
+  background-color: #dc3545;
+  border-color: #dc3545;
+}
+
+.note-item-list {
+  padding: 5px;
+}
+
+.card {
+  border-radius: 10px;
+}

@@ -5,8 +5,11 @@ var Schema = mongoose.Schema;
 
 //Create new UserSchema object
 var NoteSchema = new Schema({
-    title: String,
-    body: String
+    body: {
+        type: String,
+        required: true,
+        trim: true
+    }
 });
 
 //Create model from the above schema
