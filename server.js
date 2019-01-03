@@ -22,11 +22,15 @@ app.use(bodyParser.json({
 // serve the public directory
 app.use(express.static("public"));
 
-// use promises with Mongo and connect to the database
-var databaseUrl = "news";
-mongoose.Promise = Promise; 
-var MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost/news";
-mongoose.connect(MONGODB_URI);
+// database configuration with mongoose
+var databaseUrl = "mongodb://localhost/news";
+if (process.env.MONGODB_URI) {
+  mongoose.connect(process.env.MONGODB_URI, {useNewUrlParser: true});
+} else
+  mongoose.connect(databaseUrl);
+
+// var MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost/news";
+// mongoose.connect(MONGODB_URI, {useNewUrlParser: true});
 
 // use handlebars
 app.engine("handlebars", exphbs({
