@@ -25,6 +25,7 @@
     "express-handlebars": "^3.0.0",
     "mongoose": "^5.4.0",
     "morgan": "^1.9.1",
-    "npm": "^6.5.0"
+    "npm": "^6.5.0",
+    "request": "^2.88.0"
   }
 }
